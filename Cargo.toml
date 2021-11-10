@@ -8,3 +8,6 @@ edition = "2018"
 [dependencies]
 select = "0.5.0"
 url = "2.2.2"
+rustls = "0.20.0"
+webpki = "0.22.0"
+webpki-roots = "0.22.1"

@@ -1,7 +1,13 @@
+use crate::{
+    http::get,
+    parse::{body, headers},
+};
 
+pub fn login(url: &str, username: &str, password: &str) -> Result<i32, ()> {
+    let res = get(&url, None).or(Err(()))?;
+    let h = headers(&res);
+    let b = body(&res);
+    println!("{:#?}\n{:#?}", h, b);
 
-fn login(url: String, username: String, password: String) -> Option<i32> {
-
-
-    Some(0)
+    Ok(8)
 }
