@@ -1,16 +1,12 @@
 use std::{
-    convert::TryFrom,
     io::{Read, Result, Write},
     net::{TcpStream, ToSocketAddrs},
-    str::from_utf8,
-    sync::Arc,
 };
 
-use rustls::{ClientConfig, ClientConnection, OwnedTrustAnchor, RootCertStore, ServerName};
-use url::Url;
-use webpki_roots::TLS_SERVER_ROOTS;
-
 use crate::DEBUG;
+use native_tls::TlsConnector;
+
+use url::Url;
 
 fn fetch(
     url: &str,
@@ -50,53 +46,14 @@ fn fetch(
     if DEBUG {
         println!("request: \n{}", request);
     }
+    let connector = TlsConnector::new().unwrap();
+    let stream = TcpStream::connect(host)?;
+    let mut stream = connector.connect(hostname, stream).unwrap();
 
-    let mut root_store = RootCertStore::empty();
-    root_store.add_server_trust_anchors(TLS_SERVER_ROOTS.0.iter().map(|ta| {
-        OwnedTrustAnchor::from_subject_spki_name_constraints(
-            ta.subject,
-            ta.spki,
-            ta.name_constraints,
-        )
-    }));
-
-    let config = ClientConfig::builder()
-        .with_safe_defaults()
-        .with_root_certificates(root_store)
-        .with_no_client_auth();
-
-    let rc_config = Arc::new(config);
-    let server_addr = ServerName::try_from(hostname).expect("Invalid URL");
-    let mut client = ClientConnection::new(rc_config, server_addr).unwrap();
-    // let mut buf = String::new();
-    let mut buf = Vec::new();
-
-    client.writer().write_all(request.as_bytes()).unwrap();
-    let mut socket = TcpStream::connect(host)?;
-
-    // client.complete_io(&mut socket).;
-    // while buf.is_empty()
-    loop {
-        if client.wants_read() {
-            client.read_tls(&mut socket).unwrap();
-            client.process_new_packets().unwrap();
-            client.reader().read_to_end(&mut buf).unwrap(); // should be blocking, figure out how to make it block
-                                                            // client.reader().read_to_string(&mut buf).unwrap();
-            break;
-        }
-        if client.wants_write() {
-            client.write_tls(&mut socket).unwrap();
-        }
-    }
-
-    // stream.write_all(&request.as_bytes())?;
-    // let res: String = from_utf8(buf.as_slice())
-    //     .expect("error converting to utf8")
-    //     .to_owned();
-
-    // assert!(res.len() > 0);
-    // Ok(buf)
-    Ok(from_utf8(&buf).unwrap().to_owned())
+    stream.write_all(request.as_bytes()).unwrap();
+    let mut res = vec![];
+    stream.read_to_end(&mut res).unwrap();
+    Ok(String::from_utf8_lossy(&res).to_string())
 }
 
 /**

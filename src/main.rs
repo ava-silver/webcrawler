@@ -29,7 +29,7 @@ fn main() {
     }
 
     // login to the server
-    let _res = login(TEST2, &username, &password);
+    let _res = login(LOGIN_URL, &username, &password);
     return;
     // begin the process of web scraping
     let mut visited_links: HashSet<String> = HashSet::new();
