@@ -15,6 +15,7 @@ use crate::{
 // const BASE_URL: &str = "https://www.3700.network/fakebook/";
 const LOGIN_URL: &str = "https://fakebook.3700.network/accounts/login/?next=/fakebook/";
 const TEST: &str = "http://www.softwareqatest.com/"; //http://www.http2demo.io/";
+const TEST2: &str = "https://www.google.com/"; //http://www.http2demo.io/";
 const DEBUG: bool = false;
 fn main() {
     // collect the arguments
@@ -28,7 +29,7 @@ fn main() {
     }
 
     // login to the server
-    let _res = login(LOGIN_URL, &username, &password);
+    let _res = login(TEST2, &username, &password);
     return;
     // begin the process of web scraping
     let mut visited_links: HashSet<String> = HashSet::new();
@@ -52,22 +53,26 @@ fn main() {
 
         // Confirm valid response, if not try the next link
         let (res_code, res_message) = code(&res);
-        if res_code >= 300 {
-            if DEBUG {
-                println!("{}: {}", res_code, &res_message);
-            }
-            if res_code >= 500 {
+        match res_code {
+            300..=399 => match get_header(&res, "Location") {
+                Some(h) => link_queue.push_front(h.drop_to_fst_occ(" ")),
+                None => (),
+            },
+            500..=599 => {
                 link_queue.push_back(cur.clone());
                 visited_links.remove(&cur);
-            } else if 300 <= res_code && res_code < 400 {
-                match get_header(&res, "Location") {
-                    Some(h) => link_queue.push_front(h.drop_to_fst_occ(" ")),
-                    None => (),
-                }
             }
-
-            continue;
-        }
+            _ => (),
+        };
+        match res_code {
+            100..=299 => (),
+            _ => {
+                if DEBUG {
+                    println!("Not-ok response: {}: {}", &res_code, &res_message)
+                }
+                continue;
+            }
+        };
 
         // Scrape the page and add the valid links and keys
         let html = body(&res);
