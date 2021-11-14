@@ -60,7 +60,10 @@ pub fn headers(res: &String) -> Vec<String> {
 pub fn get_header(res: &String, hdr: &str) -> Vec<String> {
     headers(res)
         .into_iter()
-        .filter(|h| h.split(":").next() == Some(hdr))
+        .filter(|h| match h.split(":").next() {
+            Some(s) => s.eq_ignore_ascii_case(hdr),
+            None => false,
+        })
         .collect()
 }
 
@@ -139,5 +142,15 @@ mod tests {
                 "https://fakebook.3700.network/fakebook/489574850/friends/1/".to_owned()
             ))
         );
+    }
+
+    #[test]
+    fn test_get_header() {
+        let res = "HTTP/1.1 200 OK\r\nContent-Length: 1750\r\nConnection: keep-alive\r\nSet-Cookie: csrftoken=zDBlSPOhReFdO0AcXi66edtGEwazJQHL9q4owxc0fREhY2AtOZMCUqxmXzxEfS6i; expires=Sun, 13 Nov 2022 17:01:55 GMT; Max-Age=31449600; Path=/; SameSite=Lax".to_owned();
+        let mut hdrs: Vec<String> = Vec::new();
+        assert_eq!(hdrs, get_header(&res, "nothing"));
+        hdrs.push("Content-Length: 1750".to_owned());
+        assert_eq!(hdrs, get_header(&res, "content-length"));
+        assert_eq!(hdrs, get_header(&res, "Content-Length"));
     }
 }

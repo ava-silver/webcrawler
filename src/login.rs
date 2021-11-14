@@ -1,9 +1,4 @@
-use std::collections::HashMap;
-
-use crate::{
-    http::{get, post, UpdateCookies},
-    parse::get_csrf_middleware_token,
-};
+use crate::{http::HttpClient, parse::get_csrf_middleware_token};
 
 /**
  * Logs into Fakebook, returning the response, or Errors on any errors.
@@ -12,10 +7,10 @@ pub fn login(
     url: &str,
     username: &str,
     password: &str,
-    cookies: &mut HashMap<String, String>,
+    client: &mut HttpClient,
 ) -> Result<String, ()> {
-    let res = get(&url, None, cookies).or(Err(()))?;
-    cookies.update_cookies(&res);
+    let res = client.get(url, None).or(Err(()))?;
+
     let csrf_m_tok = get_csrf_middleware_token(&res).ok_or(())?;
     let data = format!(
         "username={}&password={}&csrfmiddlewaretoken={}&next=%2Ffakebook%2F",
@@ -38,11 +33,8 @@ pub fn login(
     .into_iter()
     .map(String::from)
     .collect();
-    hdrs.push(format!("Referer: {}", url));
     hdrs.push(format!("X-CSRFToken: {}", csrf_m_tok));
-    hdrs.push(format!("Content-Length: {}", data.len()));
 
-    let res = post(url, Some(hdrs), data, cookies).or(Err(()))?;
-    cookies.update_cookies(&res);
+    let res = client.post(url, Some(hdrs), data).or(Err(()))?;
     Ok(res)
 }
