@@ -5,6 +5,10 @@ use select::{
 use url::{ParseError, Url};
 
 pub trait DropUntilFirstOccurrence {
+    /**
+     * Returns a string that contains the current up until
+     * the pattern `s`, not including `s`.
+     */
     fn drop_to_fst_occ(&self, s: &str) -> String;
 }
 
@@ -30,7 +34,6 @@ pub fn scrape(html: String) -> (Vec<String>, Vec<String>) {
         .collect::<Vec<String>>();
     let flags = document
         .find(And(Class("secret_flag"), Name("h2")))
-        // .find(Class("selected"))
         .map(|n| n.text())
         .map(|flag| flag.drop_to_fst_occ(" "))
         .collect::<Vec<String>>();
@@ -43,10 +46,16 @@ pub fn scrape(html: String) -> (Vec<String>, Vec<String>) {
  */
 pub fn code(res: &String) -> (u32, String) {
     let header = res.split("\r\n").into_iter().next().unwrap();
-    let code_msg: Vec<&str> = header.split(" ").into_iter().skip(1).take(2).collect();
-    (code_msg[0].parse().unwrap(), String::from(code_msg[1]))
+    let mut code_msg = header.split(" ").into_iter().skip(1);
+    (
+        code_msg.next().unwrap().parse().unwrap(),
+        String::from(code_msg.collect::<Vec<&str>>().join(" ")),
+    )
 }
 
+/**
+ * Collects all the headers (excluding the inital line) into a vector.
+ */
 pub fn headers(res: &String) -> Vec<String> {
     res.split("\r\n\r\n")
         .next()
@@ -57,6 +66,10 @@ pub fn headers(res: &String) -> Vec<String> {
         .collect::<Vec<String>>()
 }
 
+/**
+ * Finds the header which matches the name `hdr` in the headers of `res`,
+ * performing case-insensitive match for header name.
+ */
 pub fn get_header(res: &String, hdr: &str) -> Vec<String> {
     headers(res)
         .into_iter()
@@ -108,6 +121,10 @@ pub fn internal_url(cur: &String, href: &String) -> Result<Option<String>, Parse
     Ok(Some(String::from(next.as_str())))
 }
 
+/**
+ * Finds the csrf middleware token contained in the html body of the response,
+ * or None if there is none.
+ */
 pub fn get_csrf_middleware_token(res: &String) -> Option<String> {
     let b = body(res);
     let document = Document::from(b.as_str());
@@ -152,5 +169,41 @@ mod tests {
         hdrs.push("Content-Length: 1750".to_owned());
         assert_eq!(hdrs, get_header(&res, "content-length"));
         assert_eq!(hdrs, get_header(&res, "Content-Length"));
+    }
+
+    #[test]
+    fn test_code() {
+        let res = "HTTP/1.1 200 OK\r\nContent-Length: 1750\r\nConnection: keep-alive\r\nSet-Cookie: csrftoken=zDBlSPOhReFdO0AcXi66edtGEwazJQHL9q4owxc0fREhY2AtOZMCUqxmXzxEfS6i; expires=Sun, 13 Nov 2022 17:01:55 GMT; Max-Age=31449600; Path=/; SameSite=Lax".to_owned();
+        assert_eq!((200, "OK".to_owned()), code(&res));
+        let res2 = "HTTP/1.1 404 Not Found\r\n".to_owned();
+        assert_eq!((404, "Not Found".to_owned()), code(&res2));
+    }
+
+    #[test]
+    fn test_headers() {
+        let res = "HTTP/1.1 200 OK\r\nContent-Length: 1750\r\nConnection: keep-alive\r\nSet-Cookie: csrftoken=zDBlSPOhReFdO0AcXi66edtGEwazJQHL9q4owxc0fREhY2AtOZMCUqxmXzxEfS6i; expires=Sun, 13 Nov 2022 17:01:55 GMT; Max-Age=31449600; Path=/; SameSite=Lax\r\n\r\n".to_owned();
+        assert_eq!(vec![
+            "Content-Length: 1750".to_owned(),
+            "Connection: keep-alive".to_owned(),
+            "Set-Cookie: csrftoken=zDBlSPOhReFdO0AcXi66edtGEwazJQHL9q4owxc0fREhY2AtOZMCUqxmXzxEfS6i; expires=Sun, 13 Nov 2022 17:01:55 GMT; Max-Age=31449600; Path=/; SameSite=Lax".to_owned()
+        ], headers(&res));
+    }
+
+    #[test]
+    fn test_drop() {
+        assert_eq!(
+            "kjahsdkjash dkjaskjdh asdh kjashd"
+                .to_owned()
+                .drop_to_fst_occ(" "),
+            "dkjaskjdh asdh kjashd".to_owned()
+        );
+        assert_eq!(
+            "Content-Length: 1750".to_owned().drop_to_fst_occ(" "),
+            "1750".to_owned()
+        );
+        assert_eq!(
+            "Content-Length: 1750".to_owned().drop_to_fst_occ("8"),
+            "".to_owned()
+        );
     }
 }

@@ -17,7 +17,7 @@ pub fn login(
         username, password, csrf_m_tok
     );
 
-    let mut hdrs: Vec<String> = vec![
+    let hdrs: Vec<String> = vec![
         "Origin: https://fakebook.3700.network",
         "Content-Type: application/x-www-form-urlencoded",
         "Accept: text/html",
@@ -33,7 +33,6 @@ pub fn login(
     .into_iter()
     .map(String::from)
     .collect();
-    hdrs.push(format!("X-CSRFToken: {}", csrf_m_tok));
 
     let res = client.post(url, Some(hdrs), data).or(Err(()))?;
     Ok(res)

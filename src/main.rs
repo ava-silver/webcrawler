@@ -27,8 +27,7 @@ fn main() {
     }
     let mut client = HttpClient::new(LOGIN_URL);
     let mut visited_links: HashSet<String> = HashSet::new();
-    let mut flag_links: HashSet<String> = HashSet::new();
-    let mut collected_flags: HashSet<String> = HashSet::new();
+    let mut collected_flags: u8 = 0;
     let mut link_queue: VecDeque<String> = VecDeque::new();
 
     // login to the server
@@ -39,7 +38,7 @@ fn main() {
 
     // begin the process of web scraping
     while let Some(cur) = link_queue.pop_front() {
-        if collected_flags.len() >= 5 {
+        if collected_flags >= 5 {
             break;
         }
         if !visited_links.insert(cur.clone()) {
@@ -83,33 +82,17 @@ fn main() {
         // Scrape the page and add the valid links and keys
         let html = body(&res);
         let (links, flags) = scrape(html);
-        if flags.len() > 0 {
-            flag_links.insert(cur.clone());
+        for flag in flags {
+            collected_flags += 1;
+            println!("{}", flag);
         }
         link_queue.extend(
             links
                 .into_iter()
                 .filter_map(|href| internal_url(&cur, &href).unwrap_or(None)),
         );
-        collected_flags.extend(flags);
-
-        // if DEBUG {
-        //     println!("Visited links so far: {:#?}\n", visited_links);
-        //     std::io::stdin()
-        //         .read_line(&mut String::new())
-        //         .ok()
-        //         .expect("Failed to read line");
-        // }
     }
     if DEBUG {
-        println!(
-            "Done! Visited {} links\nFlag links: {:#?}\n\nFLAGS:",
-            visited_links.len(),
-            flag_links
-        );
-    }
-
-    for flag in collected_flags {
-        println!("{}", flag);
+        println!("Done! Visited {} links\nFLAGS:", visited_links.len(),);
     }
 }
