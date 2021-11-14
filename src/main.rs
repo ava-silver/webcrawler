@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashSet, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
     env::args,
 };
 
@@ -7,35 +7,37 @@ mod http;
 mod login;
 mod parse;
 use crate::{
-    http::{get, valid_response},
+    http::{get, UpdateCookies},
     login::login,
     parse::{body, code, get_header, internal_url, scrape, DropUntilFirstOccurrence},
 };
 
-// const BASE_URL: &str = "https://www.3700.network/fakebook/";
+const BASE_URL: &str = "https://fakebook.3700.network/fakebook/";
 const LOGIN_URL: &str = "https://fakebook.3700.network/accounts/login/?next=/fakebook/";
-const TEST: &str = "http://www.softwareqatest.com/"; //http://www.http2demo.io/";
-const TEST2: &str = "https://www.google.com/"; //http://www.http2demo.io/";
 const DEBUG: bool = false;
+
 fn main() {
     // collect the arguments
     let args: Vec<String> = args().collect();
     assert_eq!(args.len(), 3);
-
     let username = &args[1];
     let password = &args[2];
     if DEBUG {
         println!("Username: {:?}, Password: {:?}", &username, &password);
     }
 
-    // login to the server
-    let _res = login(LOGIN_URL, &username, &password);
-    return;
-    // begin the process of web scraping
+    let mut cookies: HashMap<String, String> = HashMap::new();
     let mut visited_links: HashSet<String> = HashSet::new();
     let mut collected_flags: HashSet<String> = HashSet::new();
     let mut link_queue: VecDeque<String> = VecDeque::new();
-    link_queue.push_back(String::from(TEST));
+
+    // login to the server
+    let login_res = login(LOGIN_URL, &username, &password, &mut cookies).unwrap();
+    assert_eq!(code(&login_res).0, 302);
+
+    link_queue.push_front(BASE_URL.to_owned());
+
+    // begin the process of web scraping
     while let Some(cur) = link_queue.pop_front() {
         if collected_flags.len() >= 5 {
             break;
@@ -43,21 +45,26 @@ fn main() {
         if !visited_links.insert(cur.clone()) {
             continue;
         }
+        println!("{}:{}", collected_flags.len(), cur);
 
         // Get the webpage, skipping this site if the request errors
-        // let headers: Vec<String> = vec![].into_iter().map(String::from).collect();
-        let res = match get(cur.as_str(), None) {
+        let res = match get(cur.as_str(), None, &mut cookies) {
             Ok(r) => r,
             Err(_) => continue,
         };
+        cookies.update_cookies(&res);
 
         // Confirm valid response, if not try the next link
-        let (res_code, res_message) = code(&res);
+        let (res_code, _) = code(&res);
         match res_code {
-            300..=399 => match get_header(&res, "Location") {
-                Some(h) => link_queue.push_front(h.drop_to_fst_occ(" ")),
-                None => (),
-            },
+            300..=399 => {
+                if let Some(hdr) = get_header(&res, "Location").into_iter().next() {
+                    if let Some(url) = internal_url(&cur, &hdr.drop_to_fst_occ(" ")).unwrap_or(None)
+                    {
+                        link_queue.push_front(url);
+                    }
+                }
+            }
             500..=599 => {
                 link_queue.push_back(cur.clone());
                 visited_links.remove(&cur);
@@ -68,7 +75,7 @@ fn main() {
             100..=299 => (),
             _ => {
                 if DEBUG {
-                    println!("Not-ok response: {}: {}", &res_code, &res_message)
+                    println!("Not-ok response: {}: {}", &res_code, &res)
                 }
                 continue;
             }
@@ -93,7 +100,7 @@ fn main() {
         }
     }
     if DEBUG {
-        println!("Visited links: {:#?}\n\nFLAGS:", visited_links);
+        println!("Done! Visited links: {:#?}\n\nFLAGS:", visited_links);
     }
     for flag in collected_flags {
         println!("{}", flag);

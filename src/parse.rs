@@ -1,6 +1,6 @@
 use select::{
     document::Document,
-    predicate::{Class, Name},
+    predicate::{And, Attr, Class, Name},
 };
 use url::{ParseError, Url};
 
@@ -29,10 +29,10 @@ pub fn scrape(html: String) -> (Vec<String>, Vec<String>) {
         .map(String::from)
         .collect::<Vec<String>>();
     let flags = document
-        // .find(And(Class("secret_flag"), Name("h2")))
-        .find(Class("selected"))
+        .find(And(Class("secret_flag"), Name("h2")))
+        // .find(Class("selected"))
         .map(|n| n.text())
-        // .map(|flag| flag.drop_to_fst_occ(" "))
+        .map(|flag| flag.drop_to_fst_occ(" "))
         .collect::<Vec<String>>();
 
     (links, flags)
@@ -57,10 +57,11 @@ pub fn headers(res: &String) -> Vec<String> {
         .collect::<Vec<String>>()
 }
 
-pub fn get_header(res: &String, hdr: &str) -> Option<String> {
+pub fn get_header(res: &String, hdr: &str) -> Vec<String> {
     headers(res)
         .into_iter()
-        .find(|h| h.split(":").next() == Some(hdr))
+        .filter(|h| h.split(":").next() == Some(hdr))
+        .collect()
 }
 
 /**
@@ -79,7 +80,7 @@ pub fn internal_url(cur: &String, href: &String) -> Result<Option<String>, Parse
     // Try to parse the URL, or as an extension of the hostname
     let mut next = Url::parse(href.as_str()).or(Url::parse(
         format!(
-            "{}://{}/{}",
+            "{}://{}{}",
             cur_url.scheme(),
             cur_url.host_str().unwrap(),
             href
@@ -87,6 +88,9 @@ pub fn internal_url(cur: &String, href: &String) -> Result<Option<String>, Parse
         .as_str(),
     ))?;
 
+    if next.path().contains("logout") {
+        return Ok(None);
+    }
     if let Some(host) = next.host_str() {
         if cur_url.host_str() != Some(host) {
             return Ok(None);
@@ -99,4 +103,41 @@ pub fn internal_url(cur: &String, href: &String) -> Result<Option<String>, Parse
     }
 
     Ok(Some(String::from(next.as_str())))
+}
+
+pub fn get_csrf_middleware_token(res: &String) -> Option<String> {
+    let b = body(res);
+    let document = Document::from(b.as_str());
+    let tokens = document
+        .find(Attr("name", "csrfmiddlewaretoken"))
+        .filter_map(|n| n.attr("value"))
+        .map(String::from)
+        .collect::<Vec<String>>();
+    tokens.into_iter().next()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_internal_url() {
+        let cur = "https://fakebook.3700.network/fakebook/651267983/".to_owned();
+
+        assert_eq!(
+            internal_url(&cur, &"https://foo.com/fakebook/489574850/".to_owned()),
+            Ok(None)
+        );
+        assert_eq!(
+            internal_url(&cur, &"/fakebook/489574850/".to_owned()),
+            Ok(Some(
+                "https://fakebook.3700.network/fakebook/489574850/".to_owned()
+            ))
+        );
+        assert_eq!(
+            internal_url(&cur, &"/fakebook/489574850/friends/1/".to_owned()),
+            Ok(Some(
+                "https://fakebook.3700.network/fakebook/489574850/friends/1/".to_owned()
+            ))
+        );
+    }
 }
